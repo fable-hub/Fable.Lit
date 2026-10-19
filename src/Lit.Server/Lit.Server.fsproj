@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <PackageId>Fable.Lit.Server</PackageId>
+    <AssemblyName>Lit.Server</AssemblyName>
+    <Version>0.0.0</Version>
+    <Description>Renders Fable.Lit templates to HTML on .NET, with no Fable and no JavaScript runtime. The same `html $"..."` view compiles to lit in the browser and to HTML on the server, with the markers lit needs to hydrate it.</Description>
+    <PackageTags>fsharp;fable;lit;ssr;server-side-rendering</PackageTags>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Render.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The hydration internals (node indices, the digest) are diagnostics, not API:
+         the tests hold them against lit's own values, and nothing else should depend
+         on them. -->
+    <InternalsVisibleTo Include="Lit.Server.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- The escaping and the Node model come from here: a rendered view is a Node, which
+         is what an HtmlTypeProvider page template's hole takes, so a page and the views
+         inside it meet at a type rather than at a string. -->
+    <PackageReference Include="HtmlTypeProvider" Version="0.9.1" />
+  </ItemGroup>
+</Project>
