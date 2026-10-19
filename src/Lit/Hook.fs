@@ -3,6 +3,7 @@ namespace Lit
 open System
 open Fable.Core
 open Fable.Core.JsInterop
+open Browser.Types
 
 module internal HookUtil =
     let [<Literal>] RENDER_FN_CLASS_EXPR =
@@ -580,6 +581,36 @@ type Hook() =
     /// Fire a side effect after the component renders if the given value changes.
     static member inline useEffectOnChange(value: 'T, effect: 'T -> unit): unit =
         Hook.getContext().useEffectOnChange(value, effect)
+
+    /// <summary>
+    /// Listens to an event for as long as the component is connected, and stops
+    /// listening when it is disconnected. The handler may read state from the render it
+    /// was written in; it always runs with the values from the latest render.
+    /// </summary>
+    /// <example>
+    ///     Hook.useEventListener(Browser.Dom.document, "keydown", fun (ev: KeyboardEvent) ->
+    ///         if ev.key = "Escape" then setOpen false)
+    /// </example>
+    static member inline useEventListener(target: EventTarget, name: string, handler: 'E -> unit): unit =
+        // Two bugs are being avoided here, and they pull in opposite directions.
+        //
+        // Subscribing to `handler` itself and never re-subscribing captures the closure
+        // from the render that connected the component, so a handler that reads state
+        // keeps answering with the state that existed when it was bound. Re-subscribing
+        // whenever the handler changes fixes that and costs an add and a remove on the
+        // DOM every render, because a lambda written in a template is a new object each
+        // time.
+        //
+        // So the listener is registered once and reads the handler through a ref that
+        // every render refreshes: one subscription for the lifetime of the component,
+        // and never a stale closure.
+        let latest = Hook.useRef(handler)
+        latest.Value <- handler
+
+        Hook.useEffectOnce(fun () ->
+            let listener = fun (ev: Event) -> latest.Value(unbox ev)
+            target.addEventListener (name, listener)
+            Hook.createDisposable (fun () -> target.removeEventListener (name, listener)))
 
     /// <summary>
     /// Helper to implement CSS transitions in your component. It will give you the class name

@@ -38,6 +38,22 @@ Fable.Lit hooks in general have the same API as their React counterparts but may
     - `useEffectOnce`: Trigger an effect only once after the first render.
     - `useEffectOnChange`: Trigger an effect after each render **if** the given value has changed.
 
+Fable.Lit also includes hooks that React doesn't have:
+
+- `useEventListener`: Listen to an event on any `EventTarget` (`document`, `window`, an element) for as long as the component is connected. The listener is added once and removed when the component disconnects, and the handler always sees the values from the latest render.
+
+```fsharp
+[<HookComponent>]
+let Dialog () =
+    let isOpen, setOpen = Hook.useState true
+
+    Hook.useEventListener(document, "keydown", fun (ev: KeyboardEvent) ->
+        if ev.key = "Escape" then setOpen false)
+
+    if isOpen then html $"""<div class="dialog">Press Escape to close</div>"""
+    else Lit.nothing
+```
+
 ## UseElmish
 
 Thanks to the great work by [Cody Johnson](https://twitter.com/Cody_S_Johnson) with [Feliz.UseElmish](https://zaid-ajaj.github.io/Feliz/#/Hooks/UseElmish), Fable.Lit HookComponents also include `useElmish` hook to manage the internal state of your components using the model-view-update architecture.
