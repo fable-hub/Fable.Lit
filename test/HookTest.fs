@@ -13,6 +13,53 @@ open Lit.Test
 [<Emit("window.getComputedStyle($1).getPropertyValue($0)")>]
 let getComputedStyle (prop: string) (el: Browser.Types.Element): string = jsNative
 
+let mutable pings = 0
+
+[<Emit("document.dispatchEvent(new Event('hook-test-ping'))")>]
+let dispatchPing (): unit = jsNative
+
+/// Counts events two ways: into component state through the render closure, and into a
+/// module-level mutable that outlives the component.
+[<HookComponent>]
+let PingCounter () =
+    let value, setValue = Hook.useState 0
+
+    Hook.useEventListener(document, "hook-test-ping", fun (_: Browser.Types.Event) ->
+        pings <- pings + 1
+        setValue (value + 1))
+
+    html $"""<p id="ping-count">{value}</p>"""
+
+/// The descriptor is the contract: one value naming the event and the shape of its
+/// detail, which both the dispatch below and the listener take their types from.
+let cargoLoaded = customEvent<string * int> "hook-test-cargo"
+
+[<HookComponent>]
+let TypedListener () =
+    let got, setGot = Hook.useState ""
+
+    Hook.useEventListener(document, cargoLoaded, fun (name, count) ->
+        setGot (sprintf "%s:%i" name count))
+
+    // Wrapped, because `render` hands back the first element child: an unwrapped <p>
+    // would *be* the container element, and a selector searches inside it.
+    html $"""<div><p id="typed-detail">{got}</p></div>"""
+
+/// Renders the counter away on demand. Removing the host element from the document
+/// would not do: lit has no MutationObserver, so a directive is disconnected when a
+/// render stops including it, not when somebody detaches its DOM.
+[<HookComponent>]
+let PingCounterContainer () =
+    let removed, setRemoved = Hook.useState false
+
+    html
+        $"""
+      <div>
+        <button @click={Ev(fun _ -> setRemoved true)}>Remove!</button>
+        {if not removed then PingCounter() else Lit.nothing}
+      </div>
+    """
+
 [<HookComponent>]
 let Counter () =
     let value, setValue = Hook.useState 5
@@ -534,4 +581,46 @@ describe "Hook" <| fun () ->
 
         Expect.equal "rgb(35, 38, 41)" scopedColor
         Expect.notEqual nonScopedColor scopedColor
+    }
+
+    // Two things at once, because they are the two ways this hook can be wrong.
+    //
+    // The count proves the handler is not a stale closure. It reads `value` from the
+    // render it was written in, so a listener bound once at connect time and never
+    // refreshed would keep adding one to zero, and the second event would still read 1.
+    //
+    // `pings` proves the listener is really removed. It counts calls in a mutable the
+    // component does not own, so it keeps counting after the component is gone, which
+    // is exactly what a leaked listener would do.
+    it "useEventListener sees the latest render, and stops on disconnect" <| fun () -> promise {
+        pings <- 0
+        use! container = PingCounterContainer() |> render
+        let el = container.El
+
+        dispatchPing ()
+        do! elementUpdated el
+        el.getSelector("#ping-count") |> Expect.innerText "1"
+
+        dispatchPing ()
+        do! elementUpdated el
+        el.getSelector("#ping-count") |> Expect.innerText "2"
+
+        do! click el <| el.getButton("remove")
+        do! Promise.sleep 100
+
+        dispatchPing ()
+        do! Promise.sleep 0
+        pings |> Expect.equal 2
+    }
+
+    // A tuple through a DOM event. Neither side names a string or casts `detail`: they
+    // both read `cargoLoaded`, so changing the payload breaks the compile rather than
+    // the runtime.
+    it "useEventListener carries a typed detail both ways" <| fun () -> promise {
+        use! container = TypedListener() |> render
+        let el = container.El
+
+        document.dispatchCustom(cargoLoaded, ("crate", 3))
+        do! elementUpdated el
+        el.getSelector("#typed-detail") |> Expect.innerText "crate:3"
     }

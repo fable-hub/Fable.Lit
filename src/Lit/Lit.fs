@@ -386,3 +386,57 @@ module DomHelpers =
     /// Extracts `event.target.value` and passes it to the handler.
     let inline EvVal (handler: string -> unit): Event -> unit =
         fun (ev: Event) -> handler ev.target.Value
+
+    /// A custom event's name together with the type its `detail` carries.
+    ///
+    /// The point is that one value states both, so the code that raises an event and
+    /// the code that listens for it cannot disagree about what travels between them.
+    /// Without it each side spells the name out and casts `detail` on its own, and the
+    /// cast is unchecked: change the payload on the producer and the consumer keeps
+    /// compiling and starts reading a shape that is no longer there.
+    ///
+    /// Declare one per event, next to the others, and let both ends take the name and
+    /// the type from it:
+    ///
+    ///     let itemAdded = customEvent<string * int> "item-added"
+    ///
+    /// Erased, so it is the name string at runtime and costs nothing to pass around.
+    [<Erase>]
+    type CustomEventOf<'T> = CustomEventOf of name: string
+
+    /// Declares a custom event: its name, and the type its `detail` carries.
+    ///
+    /// A function rather than the case constructor, because type arguments cannot be
+    /// applied to a union case: `CustomEventOf<string * int> "name"` does not compile,
+    /// and requiring a type annotation on every declaration would be a worse tax than
+    /// this one line.
+    let customEvent<'T> (name: string) : CustomEventOf<'T> = CustomEventOf name
+
+    [<AutoOpen>]
+    module CustomEventOfExtensions =
+        [<Emit("new CustomEvent($0, $1)")>]
+        let private newCustomEvent (name: string) (opts: CustomEventInit<'T>): CustomEvent<'T> = jsNative
+
+        type CustomEventOf<'T> with
+            member this.Name = let (CustomEventOf name) = this in name
+
+        type EventTarget with
+            /// Raises a custom event with the payload its descriptor names.
+            ///
+            /// On any EventTarget rather than only on a LitElement: islands that do not
+            /// hold references to each other talk over `document`, which is an
+            /// EventTarget and not an element.
+            member this.dispatchCustom(ev: CustomEventOf<'T>, detail: 'T, ?bubbles: bool, ?composed: bool, ?cancelable: bool): unit =
+                let opts =
+                    JsInterop.jsOptions<CustomEventInit<'T>> (fun o ->
+                        // Assigned through `Some` deliberately: `o.detail` is an option
+                        // and Fable will not wrap a generic for you. See the same note
+                        // on LitElement.dispatchCustomEvent.
+                        o.detail <- Some detail
+                        o.bubbles <- defaultArg bubbles true
+                        o.composed <- defaultArg composed true
+                        o.cancelable <- defaultArg cancelable true)
+
+                newCustomEvent ev.Name opts
+                |> this.dispatchEvent
+                |> ignore

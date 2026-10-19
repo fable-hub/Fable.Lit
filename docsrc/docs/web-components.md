@@ -159,6 +159,25 @@ let CloseMe() =
 These parameters are set to true by default (except from detail) for convenience since most of the time this is what you want when you dispatch events
 :::
 
+### Typed custom events
+
+With `dispatchCustomEvent`, the sender and each listener spell out the event name, and every listener casts `detail` to the type it expects. If the sender's payload changes, the listeners still compile and read the wrong shape at runtime.
+
+`customEvent<'T> "name"` declares the name and the type of `detail` in one value. Raise it with `dispatchCustom` on any `EventTarget` (`document` included, so components that hold no reference to each other can still talk), and listen with `Hook.useEventListener`, which hands the handler the payload already typed:
+
+```fsharp
+let itemAdded = customEvent<string * int> "item-added"
+
+// Sender
+document.dispatchCustom(itemAdded, ("apples", 3))
+
+// Listener, in a HookComponent or LitElement
+Hook.useEventListener(document, itemAdded, fun (name, count) ->
+    setLast $"{count} {name}")
+```
+
+Change the payload type in `itemAdded` and both ends stop compiling until they agree again. `dispatchCustom` takes the same optional `bubbles`, `composed` and `cancelable` arguments as `dispatchCustomEvent`, also `true` by default.
+
 ## Styles
 
 By default, Lit Elements will attach a [Shadow DOM] to the generated HTML Element. The main advantage of the Shadow DOM is **style encapsulation**, meaning the infamous CSS conflict's won't happen between your component and the rest of the document. On the other hand, this also means global styles won't affect your component, or you cannot use CSS frameworks like Bootstrap or Bulma.
