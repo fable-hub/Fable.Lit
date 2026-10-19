@@ -7,6 +7,15 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NpmDependencies>
       <NpmPackage Name="lit" Version="gte 2.0.0" ResolutionStrategy="Max" />
+      <!-- Hydrate.fs imports this at module level and Lit.Elmish imports Hydrate, so a
+           bundler has to resolve it for every consumer of either, including one that
+           never hydrates anything. Declared so it appears as a dependency rather than as
+           "Rollup failed to resolve import" the first time somebody builds. Nothing of it
+           reaches the output unless adopt is called: the import resolves, and then tree
+           shaking takes it away again.
+           (No double hyphen in this file. MSBuild parses it as XML, where two of them in
+           a comment is a parse error.) -->
+      <NpmPackage Name="@lit-labs/ssr-client" Version="gte 1.0.0" ResolutionStrategy="Max" />
     </NpmDependencies>
   </PropertyGroup>
   <ItemGroup>
@@ -16,6 +25,8 @@
     <Compile Include="HMR.fs" />
     <Compile Include="Hook.fs" />
     <Compile Include="LitElement.fs" />
+    <!-- Opt-in, and the only file that touches @lit-labs/ssr-client. -->
+    <Compile Include="Hydrate.fs" />
   </ItemGroup>
   <ItemGroup>
     <Content Include="*.fsproj; *.fs; package.json" PackagePath="fable\" />

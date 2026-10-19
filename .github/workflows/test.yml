@@ -35,6 +35,10 @@ jobs:
       # Builds the sample as well as the packages
       - name: Build
         run: dotnet build Fable.Lit.sln
+      # Lit.Server's tests. Runs before npm test: it writes test/server-rendered.json,
+      # which the browser-side differential test compares lit's output against
+      - name: Test Lit.Server
+        run: dotnet test test/Lit.Server.Tests/Lit.Server.Tests.fsproj
       # Compiles the tests with Fable and runs them in headless Chrome
       - name: Test
         run: npm test

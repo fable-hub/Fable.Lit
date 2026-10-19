@@ -71,13 +71,14 @@ jobs:
           # nuget.org user that owns the trusted publishing policy (public information)
           user: ${{ secrets.NUGET_USER }}
 
-      # Only the packages that have a CHANGELOG.md are released. Both are packed every time;
+      # Only the packages that have a CHANGELOG.md are released. All are packed every time;
       # --skip-duplicate skips the one whose version didn't change in this release.
       # The .snupkg symbol packages are pushed along with their .nupkg.
       - name: Pack and publish
         run: |
             dotnet pack src/Lit/Lit.fsproj -c Release -o ./nupkgs
             dotnet pack src/Lit.Elmish/Lit.Elmish.fsproj -c Release -o ./nupkgs
+            dotnet pack src/Lit.Server/Lit.Server.fsproj -c Release -o ./nupkgs
             dotnet nuget push "./nupkgs/*.nupkg" --api-key $NUGET_KEY --source https://api.nuget.org/v3/index.json --skip-duplicate
         env:
           NUGET_KEY: ${{ steps.login.outputs.NUGET_API_KEY }}

@@ -24,6 +24,45 @@ module Program =
         Program.withSetState setState program
 
     /// <summary>
+    /// Mounts an Elmish loop in the specified element, adopting server-rendered markup
+    /// on the first render instead of replacing it.
+    /// </summary>
+    /// <remarks>
+    /// The element must hold markup produced by Lit.Server's hydratable rendering, and
+    /// the model behind it must be the one the server rendered from. An Elmish program
+    /// whose init is deterministic satisfies that by itself; one whose init depends on
+    /// server state has to be given the same state, usually by embedding it in the page.
+    ///
+    /// Only the first render adopts. Everything after it is an ordinary render into DOM
+    /// lit owns by then.
+    /// </remarks>
+    let withLitHydratedOnElement (el: Element) (program: Program<'arg, 'model, 'msg, Lit.TemplateResult>): Program<'arg, 'model, 'msg, Lit.TemplateResult> =
+        let mutable adopted = false
+
+        let setState model dispatch =
+            let view = Program.view program model dispatch
+
+            if adopted then
+                Lit.render el view
+            else
+                adopted <- true
+                Hydrate.adopt el view
+
+        Program.withSetState setState program
+
+    /// <summary>
+    /// Mounts an Elmish loop in the element with the specified id, adopting
+    /// server-rendered markup on the first render.
+    /// </summary>
+    let withLitHydrated (id: string) (program: Program<'arg, 'model, 'msg, Lit.TemplateResult>): Program<'arg, 'model, 'msg, Lit.TemplateResult> =
+        let el = document.getElementById (id)
+
+        if isNull el then
+            failwith $"Cannot find element with id {id}"
+
+        withLitHydratedOnElement el program
+
+    /// <summary>
     /// Mounts an Elmish loop in the element with the specified id
     /// </summary>
     /// <remarks>

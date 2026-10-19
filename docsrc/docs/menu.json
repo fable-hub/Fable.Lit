@@ -4,5 +4,6 @@
     "docs/hook-components",
     "docs/web-components",
     "docs/hmr",
+    "docs/server-rendering",
     "docs/testing"
 ]
