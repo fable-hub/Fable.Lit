@@ -23,6 +23,10 @@ module Types =
     type ChildPart =
         inherit Part
         abstract parentNode : Element
+        /// Tells everything rendered through this part whether it is still connected.
+        /// AsyncDirectives inside it are notified, which is how they let go of timers,
+        /// sockets and observers when the tree they live in leaves the page.
+        abstract setConnected: connected: bool -> unit
 
     type ElementPart =
         inherit Part
@@ -66,8 +70,10 @@ type LitBindings =
     /// </summary>
     /// <param name="el">The container to render into.</param>
     /// <param name="t">A <see cref="Lit.TemplateResult">TemplateResult</see> to be rendered.</param>
+    /// Returns lit's root part for the container. `Lit.render` ignores it; `Lit.renderPart`
+    /// hands it back.
     [<ImportMember("lit")>]
-    static member render(t: TemplateResult, el: Element) : unit = jsNative
+    static member render(t: TemplateResult, el: Element) : ChildPart = jsNative
 
     /// <summary>
     /// A sentinel value that signals a ChildPart to fully clear its content.
@@ -162,6 +168,123 @@ type LitBindings =
     [<ImportMember("lit/directives/unsafe-html.js")>]
     static member unsafeHTML(html: string) : TemplateResult = jsNative
 
+/// The whole of the element this defines: two callbacks the browser already provides,
+/// forwarded to whoever is listening. Private, because the thing worth exposing is
+/// `Lit.trackConnection`, not a way to define elements.
+module private ConnectionTracking =
+    [<Emit("customElements.get($0)")>]
+    let definedFor (tag: string) : obj = jsNative
+
+    [<Emit("customElements.define($0, class extends HTMLElement { connectedCallback() { $1(this, true) } disconnectedCallback() { $1(this, false) } })")>]
+    let define (tag: string, onChange: Element -> bool -> unit) : unit = jsNative
+
+    [<Emit("$0['_$litPart$']")>]
+    let rootPartOf (el: Element) : obj = jsNative
+
+    /// One subscription: what to run when an element with the tag joins the document,
+    /// and what that run left behind for when it leaves again. Kept per element, because
+    /// a tag can have many and each has its own.
+    type Subscription(onConnected: Element -> IDisposable) =
+        let live = Collections.Generic.List<Element * IDisposable>()
+
+        let indexOf (el: Element) =
+            live.FindIndex(fun (candidate, _) -> obj.ReferenceEquals(candidate, el))
+
+        member _.Changed(el: Element, connected: bool) =
+            let existing = indexOf el
+
+            if connected then
+                // Guarded, because an element moved within the document reports its
+                // arrival before its departure in some orders, and setting up twice would
+                // leave the first one with nobody to dispose it.
+                if existing < 0 then
+                    live.Add(el, onConnected el)
+            elif existing >= 0 then
+                let _, disposable = live.[existing]
+                live.RemoveAt existing
+                disposable.Dispose()
+
+        /// Stop listening, and dispose whatever is still set up.
+        member _.Stop() =
+            for _, disposable in Seq.toArray live do
+                disposable.Dispose()
+
+            live.Clear()
+
+    /// Subscriptions by tag, so that subscribing twice does not define the element twice
+    /// -- which the browser refuses anyway -- and so that one going away leaves the
+    /// others, and the forwarding, alone.
+    let private handlers = Collections.Generic.Dictionary<string, Collections.Generic.Dictionary<int, Subscription>>()
+    let mutable private nextId = 0
+
+    let private forTag (tag: string) =
+        match handlers.TryGetValue tag with
+        | true, existing -> existing
+        | _ ->
+            let created = Collections.Generic.Dictionary<int, Subscription>()
+            handlers.[tag] <- created
+            created
+
+    /// The elements of each tag that are in the document right now.
+    ///
+    /// Kept because a handler can ask later than an element arrives, and on a
+    /// server-rendered page always does: the element is in the markup, and defining its
+    /// tag upgrades it on the spot, before whoever asked for the tag to be defined has
+    /// been written down as listening. An arrival is only announced once, so anyone who
+    /// was not listening at that moment has to be told from here.
+    let private present = Collections.Generic.Dictionary<string, JS.Set<Element>>()
+
+    let private presentFor (tag: string) =
+        match present.TryGetValue tag with
+        | true, existing -> existing
+        | _ ->
+            let created = JS.Constructors.Set.Create<Element>()
+            present.[tag] <- created
+            created
+
+    let ensureDefined (tag: string) =
+        if isNull (definedFor tag) then
+            let subscribers = forTag tag
+            let here = presentFor tag
+
+            define (
+                tag,
+                fun el connected ->
+                    if connected then
+                        here.add el |> ignore
+                    else
+                        here.delete el |> ignore
+
+                    // Nothing rendered into it yet is the ordinary case for the connected
+                    // callback, which fires while the element is still being upgraded.
+                    match rootPartOf el with
+                    | null -> ()
+                    | part -> (unbox<ChildPart> part).setConnected connected
+
+                    for subscription in Seq.toArray subscribers.Values do
+                        subscription.Changed(el, connected)
+            )
+
+    let subscribe (tag: string) (onConnected: Element -> IDisposable) =
+        ensureDefined tag
+        let subscribers = forTag tag
+        let subscription = Subscription(onConnected)
+        let id = nextId
+        nextId <- nextId + 1
+        subscribers.[id] <- subscription
+
+        // Whatever is already in the document arrived before this was listening: the
+        // elements a server rendered, upgraded a few lines up, and anything a tag that
+        // was already tracked has gathered since. Their arrival is over, so it is told
+        // again here. Telling it twice would be harmless -- a subscription sets up once
+        // for an element it already holds -- but nothing else is going to tell it once.
+        (presentFor tag).forEach (fun el _ _ -> subscription.Changed(el, true))
+
+        { new IDisposable with
+            member _.Dispose() =
+                subscribers.Remove id |> ignore
+                subscription.Stop() }
+
 [<AutoOpen>]
 module LitHelpers =
     /// <summary>
@@ -212,7 +335,80 @@ type Lit() =
     /// </summary>
     /// <param name="el">The container to render into.</param>
     /// <param name="t">A <see cref="Lit.TemplateResult">TemplateResult</see> to be rendered.</param>
-    static member render el t: unit = LitBindings.render (t, el)
+    static member render el t: unit = LitBindings.render (t, el) |> ignore
+
+    /// Renders into the container and hands back lit's root part for it.
+    /// </summary>
+    /// <remarks>
+    /// The part is how a rendered tree is told it has been disconnected:
+    /// <c>part.setConnected false</c> reaches every AsyncDirective inside it. Without it,
+    /// markup rendered into a plain element has no lifecycle at all -- take the element
+    /// out of the page and whatever it started keeps running, because nothing was ever
+    /// told. Elements that are components have this already, through
+    /// <c>Hook.useEffectOnce</c> and a LitElement's own disconnectedCallback.
+    ///
+    /// Calling it again on the same container returns the same part, so it is also how to
+    /// get hold of the part for a container something else rendered into.
+    /// </remarks>
+    static member renderPart (el: Element) (t: TemplateResult) : ChildPart = LitBindings.render (t, el)
+
+    /// <summary>
+    /// Makes every element with this tag report leaving and rejoining the document to
+    /// whatever lit rendered into it.
+    /// </summary>
+    /// <remarks>
+    /// lit propagates disconnection through its own rendering: clear a part, and the
+    /// directives in what it removed are told. What it never does is watch the document,
+    /// so markup rendered into an element that something else removes hears nothing.
+    /// LitElement does not solve that either -- it borrows the only mechanism there is,
+    /// its own connected and disconnected callbacks, and calls setConnected from them.
+    ///
+    /// This borrows the same one. The tag becomes a custom element whose only behaviour
+    /// is to forward those callbacks to the root part inside it, so AsyncDirectives pause
+    /// when the host leaves the document and resume when it returns. It pauses rather than
+    /// stops on purpose: an element that was merely moved comes back with everything it
+    /// had.
+    ///
+    /// Call it once. Defining a tag upgrades the instances already on the page, so it can
+    /// run before or after the markup arrives. The tag must contain a dash, as custom
+    /// element names must.
+    /// </remarks>
+    /// <example>
+    ///     Lit.trackConnection "my-island"
+    /// </example>
+    static member trackConnection(tag: string) : unit = ConnectionTracking.ensureDefined tag
+
+    /// <summary>
+    /// The same, and runs something of yours while the element is in the document.
+    /// </summary>
+    /// <remarks>
+    /// The handler is called when an element with this tag joins the document, and what
+    /// it returns is disposed when that element leaves it again -- so a timer, a socket
+    /// or a listener is set up and torn down in one place, and neither half can be
+    /// written without the other. Rejoining calls it again, because it left.
+    ///
+    /// The forwarding to the rendered tree still happens; this is in addition to it.
+    ///
+    /// The first call arrives while the element is being upgraded, before anything has
+    /// been rendered into it, so a handler that expects content has to allow for that.
+    ///
+    /// An element that is already in the document when this is called has arrived as
+    /// far as the handler is concerned, and is reported straight away. That is every
+    /// element a server rendered, and every element of a tag that was already tracked.
+    /// </remarks>
+    /// <example>
+    ///     Lit.trackConnection("my-island", fun el ->
+    ///         let id = JS.setInterval (fun () -> tick el) 1000
+    ///         Hook.createDisposable (fun () -> JS.clearInterval id))
+    /// </example>
+    /// <returns>
+    /// A disposable that stops listening and disposes whatever is still set up. It does
+    /// not undefine the element, which the platform does not allow and which nothing else
+    /// needs: the forwarding carries on, and so do any other subscriptions. Shaped this
+    /// way to sit in a hook, where <c>Hook.useEffectOnce</c> wants something to dispose.
+    /// </returns>
+    static member trackConnection(tag: string, onConnected: Element -> IDisposable) : IDisposable =
+        ConnectionTracking.subscribe tag onConnected
 
     /// <summary>
     /// Generates a single string that filters out false-y values from a tuple sequence.

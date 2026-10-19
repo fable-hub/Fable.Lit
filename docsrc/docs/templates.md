@@ -193,6 +193,38 @@ You can access to the raw bindings via the `LitBindings` static class.
 Check the full list in the [lit docs](https://lit.dev/docs/api/directives/)
 :::
 
+## Leaving the page
+
+Components know when they leave the page: a `LitElement` gets `disconnectedCallback`, and a `HookComponent` disposes what `Hook.useEffectOnce` returned. Lit also tells directives when it clears the part they are in itself, for example when a conditional switches to `Lit.nothing`. But a template rendered with `Lit.render` into a plain element hears nothing when *other* code takes that element out of the document, so timers and subscriptions started inside it keep running.
+
+`Lit.renderPart` renders like `Lit.render` and returns Lit's root part for the container. Call `part.setConnected false` to tell every directive in the tree it has been disconnected, and `part.setConnected true` to bring it back.
+
+```fsharp
+let part = Lit.renderPart container (html $"""<p>...</p>""")
+
+// later, when the container is going away
+part.setConnected false
+```
+
+To have the browser do that for you, use a tag with a dash in its name as the container and call `Lit.trackConnection` with that tag. The tag becomes a custom element whose only behaviour is to pass its connected and disconnected callbacks on to whatever Lit rendered inside it, so its directives pause when it leaves the document and resume when it returns.
+
+```fsharp
+Lit.trackConnection "my-island"
+```
+
+```html
+<my-island id="cart"></my-island>
+```
+
+Give it a handler to run your own setup while the element is in the document. The handler is called when an element with the tag joins the document, and what it returns is disposed when that element leaves. Elements already in the page (for example ones a server rendered) count as having joined, so the handler is called for them straight away. The call returns an `IDisposable` that stops the handler.
+
+```fsharp
+let subscription =
+    Lit.trackConnection("my-island", fun el ->
+        let id = JS.setInterval (fun () -> refresh el) 1000
+        Hook.createDisposable (fun () -> JS.clearInterval id))
+```
+
 ## Elmish
 
 Fable.Lit.Elmish allows you to write a frontend app using the popular [Elmish](https://elmish.github.io/) library by [Eugene Tolmachev](https://github.com/et1975) with a view function returning `Lit.TemplateResult`. The package also includes support for Webpack's [Hot Module Replacement](https://webpack.js.org/concepts/hot-module-replacement/) out-of-the-box thanks to [Maxime Mangel](https://twitter.com/MangelMaxime) original work with Elmish.HMR.

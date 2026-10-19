@@ -10,6 +10,7 @@
     <Compile Include="EffectTimingTest.fs" />
     <Compile Include="LitElementTest.fs" />
     <Compile Include="ScopeCssTest.fs" />
+    <Compile Include="DisconnectTest.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\src\Lit.Elmish\Lit.Elmish.fsproj" />
