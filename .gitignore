@@ -357,3 +357,6 @@ MigrationBackup/
 
 # Ionide (cross platform F# VS Code tools) working folder
 .ionide/
+test/react-check/build/
+test/react-check/obj/
+test/react-check/bin/

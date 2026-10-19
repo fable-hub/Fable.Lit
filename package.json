@@ -8,12 +8,13 @@
         "predocs": "shx rm -rf deploy",
         "docs": "nacara",
         "docs:watch": "nacara watch",
-        "docs:deploy": "npm run docs && gh-pages -d build/docs"
+        "docs:deploy": "npm run docs && gh-pages -d build/docs",
+        "check:react": "dotnet fable test/react-check -o test/react-check/build && cd test/react-check && vite"
     },
     "dependencies": {
         "lit": "^3.3.3",
-        "react": "^17.0.2",
-        "react-dom": "^17.0.2"
+        "react": "^19",
+        "react-dom": "^19"
     },
     "devDependencies": {
         "@web/test-runner": "^0.20.2",
@@ -26,5 +27,9 @@
         "shx": "^0.3.3",
         "vite": "^6.4.4",
         "vscode-theme-onelight": "github:akamud/vscode-theme-onelight"
+    },
+    "overrides": {
+        "react": "$react",
+        "react-dom": "$react-dom"
     }
 }

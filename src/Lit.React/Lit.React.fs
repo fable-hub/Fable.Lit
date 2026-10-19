@@ -7,6 +7,20 @@ open Fable.React
 open Browser.Types
 open Lit
 
+/// A React root, and the function that makes one.
+///
+/// Declared here because Fable.React binds only the old `react-dom` entry point, not
+/// `react-dom/client`. It is the whole of the `react-dom/client` surface this file
+/// needs.
+type IReactRoot =
+    abstract render: element: ReactElement -> unit
+    abstract unmount: unit -> unit
+
+[<AutoOpen>]
+module private ReactDomClientBindings =
+    [<Import("createRoot", "react-dom/client")>]
+    let createRoot (container: Element) : IReactRoot = jsNative
+
 /// <summary>
 /// Directive that allows a react component to be rendered inside a Lit template.
 /// </summary>
@@ -16,21 +30,41 @@ type ReactDirective() =
 
     let mutable _domEl = Unchecked.defaultof<Element>
 
+    // The root React renders through, and the element it was created for.
+    let mutable _root = Unchecked.defaultof<IReactRoot>
+
     member _.className = ""
     member _.renderFn = Unchecked.defaultof<obj -> ReactElement>
 
     member this.render(props: obj) =
         Lit.html $"""<div class={this.className} {Lit.refCallback(function
             | Some el when this.isConnected ->
+                // createRoot, not ReactDom.render: the latter was deprecated in React 18
+                // and is gone in 19, where this directive raised rather than rendered.
+                //
+                // One root per element, and only while it is the element being rendered
+                // into. Keeping the first root forever would render into a container lit
+                // had already replaced; making a new one per render would mount the
+                // component again every time, discarding whatever state it held.
+                if isNull (box _root) || not (obj.ReferenceEquals(_domEl, el)) then
+                    if not (isNull (box _root)) then
+                        _root.unmount()
+
+                    _root <- createRoot el
+
                 _domEl <- el
-                let reactEl = this.renderFn props
-                ReactDom.render(reactEl, el)
+                _root.render(this.renderFn props)
             | _ -> ()
         )}></div>"""
 
     member _.disconnected() =
-        if not(isNull _domEl) then
-            ReactDom.unmountComponentAtNode(_domEl) |> ignore
+        // unmount on the root, for the same reason. unmountComponentAtNode belongs to
+        // the API that created the root the old way, and does nothing to this one.
+        if not (isNull (box _root)) then
+            _root.unmount()
+            _root <- Unchecked.defaultof<IReactRoot>
+
+        _domEl <- Unchecked.defaultof<Element>
 
 type React =
     /// <summary>
