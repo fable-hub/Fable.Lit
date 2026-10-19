@@ -230,6 +230,32 @@ let MyElement()
     """
 ```
 
+## Forms
+
+A form ignores custom elements inside it unless the element is declared form-associated. Set `config.formAssociated <- true` to declare it. The element's `ElementInternals` (from `attachInternals()`) then give it the form it belongs to, a value it can submit (`setFormValue`) and validity it can report.
+
+For example, a submit button that isn't a `<button>` in the form's own DOM:
+
+```fsharp
+[<LitElement("my-submit-button")>]
+let SubmitButton () =
+    let host, _ = LitElement.init (fun config -> config.formAssociated <- true)
+
+    // attachInternals can only be called once per element
+    if isNull (box host?internals) then
+        host?internals <- host?attachInternals ()
+
+    html $"""<button type="button" @click={Ev(fun _ -> host?internals?form?requestSubmit ())}>Go</button>"""
+```
+
+```html
+<form>
+    <my-submit-button></my-submit-button>
+</form>
+```
+
+Without `formAssociated`, `attachInternals()` still succeeds, but the internals are no use for forms: reading `form` from them throws `NotSupportedError`.
+
 ## Differences with Hook Components
 
 - Web Components are actual HTML elements that live in the DOM. Hook Components are just abstractions based on [Lit async directives](https://lit.dev/docs/templates/custom-directives/#async-directives)

@@ -150,6 +150,24 @@ type LitConfig<'Props> =
     abstract styles: CSSResult list with get, set
     /// Whether the element should render to shadow or light DOM (defaults to true).
     abstract useShadowDom: bool with get, set
+    /// <summary>
+    /// Whether the element takes part in forms (defaults to false).
+    /// </summary>
+    /// <remarks>
+    /// Sets <c>static formAssociated</c> on the custom element, which is what lets a
+    /// form see it at all: the element then gets <c>attachInternals()</c>, through which
+    /// it can read the form it belongs to, contribute a value to submission, and be told
+    /// when the form resets. Without it a custom control is a div that looks the part.
+    ///
+    /// The element still decides what it does with that. A submit button, for instance,
+    /// is this plus a click handler calling <c>requestSubmit()</c> on the form its
+    /// internals report.
+    /// </remarks>
+    /// <example>
+    ///     LitElement.init(fun config ->
+    ///         config.formAssociated &lt;- true)
+    /// </example>
+    abstract formAssociated: bool with get, set
 
 type ILitElementInit<'Props> =
     abstract init: initFn: (LitConfig<'Props> -> JS.Promise<unit>) -> LitElement * 'Props
@@ -157,6 +175,7 @@ type ILitElementInit<'Props> =
 type LitElementInit<'Props>() =
     let mutable _initPromise: JS.Promise<unit> = null
     let mutable _useShadowDom = true
+    let mutable _formAssociated = false
     let mutable _props = Unchecked.defaultof<'Props>
     let mutable _styles = Unchecked.defaultof<CSSResult list>
 
@@ -166,6 +185,7 @@ type LitElementInit<'Props>() =
         member _.props with get() = _props and set v = _props <- v
         member _.styles with get() = _styles and set v = _styles <- v
         member _.useShadowDom with get() = _useShadowDom and set v = _useShadowDom <- v
+        member _.formAssociated with get() = _formAssociated and set v = _formAssociated <- v
 
     interface ILitElementInit<'Props> with
         member this.init initFn =
@@ -294,6 +314,12 @@ type LitElementAttribute(name: string) =
 
             propsOptions |> Option.iter (fun props -> defineGetter(classExpr, "properties", fun () -> props))
             styles |> Option.iter (fun styles -> defineGetter(classExpr, "styles", fun () -> styles))
+
+            // A static getter rather than a second class expression, because that is all
+            // `static formAssociated = true` is, and the browser reads it when the
+            // element is defined.
+            if config.formAssociated then
+                defineGetter(classExpr, "formAssociated", fun () -> true)
 
             if not config.useShadowDom then
                 emitJsStatement classExpr """$0.prototype.createRenderRoot = function() {
