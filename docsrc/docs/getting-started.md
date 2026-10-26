@@ -5,22 +5,24 @@ layout: nacara-standard
 
 ## Requirements
 
-Fable.Lit packages require **fable 3.6** dotnet tool and **Lit 2** from npm.
+Fable.Lit 2 requires the **Fable 5** dotnet tool and **Lit 3** from npm (Lit 2 also works). Fable 4 should work too but hasn't been tested. Fable.Lit.Elmish 2 requires **Elmish 5**.
 
 ## Installation
 
-In the directory of your .fsproj, install the packages you need. Note the package ids are prefixed by `Fable.` but not the actual namespaces.
+In the directory of your .fsproj, install the packages you need and Lit from npm. Note the package ids are prefixed by `Fable.` but not the actual namespaces.
+
+```
+dotnet add package Fable.Lit
+dotnet add package Fable.Lit.Elmish
+npm install lit
+```
 
 :::info
-We recommend using [Femto](https://github.com/Zaid-Ajaj/Femto) so Nuget and NPM dependencies are installed automatically.
+If you use [Femto](https://github.com/Zaid-Ajaj/Femto), `dotnet femto install Fable.Lit` installs the npm dependency for you.
 :::
 
-```
-dotnet femto install Fable.Lit
-dotnet femto install Fable.Lit.Elmish
-dotnet femto install Fable.Lit.Test
-```
+Fable.Lit.Test hasn't been released for Fable 5 yet, see [Testing](./testing.html).
 
 ## Scaffolding
 
-To get up-to-speed faster you can just clone [Lit.TodoMVC](https://github.com/alfonsogarciacaro/Lit.TodoMVC), which already includes HTML templates, hook components, hot reloading and testing, and use it as the base for your app.
+To get up-to-speed faster you can start from [fable-lit-fullstack-template](https://github.com/JordanMarr/fable-lit-fullstack-template), a full-stack F# template with Fable.Lit web components, the typed [Fable.Lit.Dsl](https://github.com/JordanMarr/Fable.Lit.Dsl) and type-safe client/server RPC. [Lit.TodoMVC](https://github.com/alfonsogarciacaro/Lit.TodoMVC) is a smaller example including HTML templates, hook components, hot reloading and testing, but it was written for Fable 3 and Fable.Lit 1.

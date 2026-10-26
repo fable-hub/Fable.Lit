@@ -11,7 +11,7 @@ It has a couple of disadvantages however: usually requires a configuration file 
 
 ## Vite
 
-A new generation of JS tooling is appearing which follow best practices by default so they require little to no configuration. Moreover, these tools include a development server that doesn't bundle your application, which makes updated much faster as the browser only need to load the modules that have changed. The most prominent examples are [Vite](https://vitejs.dev) and [Snowpack](https://www.snowpack.dev/).
+A new generation of JS tooling is appearing which follow best practices by default so they require little to no configuration. Moreover, these tools include a development server that doesn't bundle your application, which makes updated much faster as the browser only need to load the modules that have changed. The most prominent example is [Vite](https://vite.dev).
 
 We've personally got great results with Vite. It is somewhat opinionated and thanks to this you can get a development server and build tool with zero-config by conforming to a few defaults:
 
@@ -35,7 +35,7 @@ That's it, now you have an extremely fast development server and an optimized bu
 
 ## Elmish and Local HMR
 
-Lit.Elmish is compatible with [Elmish HMR](https://elmish.github.io/hmr/) (use Fable.Elmish.HMR >= 4.3 for Vite support).
+For Elmish apps, whole-program HMR is provided by [Elmish HMR](https://elmish.github.io/hmr/), which Fable.Lit.Elmish 1.x was used with. It hasn't been tested with Fable.Lit.Elmish 2 and Elmish 5 yet.
 
 Fable.Lit also provides some code helpers to enable HMR support for local component hooks, like `useState` or `useElmish` (only compatible with Vite at the time of writing). To this effect, the first thing you need to do is to instantiate a private _HMR token_ at the top of each file containing Fable.Lit components:
 
