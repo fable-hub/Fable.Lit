@@ -3,7 +3,7 @@ title: Hook Components
 layout: nacara-standard
 ---
 
-Fable.Lit includes the `HookComponent` attribute. When you decorate a view function with it, this lets you use [hooks](https://reactjs.org/docs/hooks-overview.html) in a similar way as [ReactComponent](https://zaid-ajaj.github.io/Feliz/#/Feliz/React/NotJustFunctions) attribute does. Hook support is included in Fable.Lit's F# code and doesn't require any extra JS dependency besides Lit.
+Fable.Lit includes the `HookComponent` attribute. When you decorate a view function with it, this lets you use [hooks](https://react.dev/reference/react/hooks) in a similar way as [ReactComponent](https://zaid-ajaj.github.io/Feliz/#/Feliz/React/NotJustFunctions) attribute does. Hook support is included in Fable.Lit's F# code and doesn't require any extra JS dependency besides Lit.
 
 ```fsharp
 open Lit

@@ -3,6 +3,10 @@ title: Testing
 layout: nacara-standard
 ---
 
+:::warning
+Fable.Lit.Test hasn't been released for Fable 5 yet: it depends on [Fable.Expect](https://github.com/fable-compiler/Fable.Expect), which needs an update first. The latest release (1.x) works with Fable 3 and Fable.Lit 1.
+:::
+
 The `Fable.Lit.Test` packages contains helpers for easily tests your Lit components following best practices. It's composed of several parts:
 
 - `Expect`: Assertion helpers that will throw errors compatible with diffing in JS test runners.
